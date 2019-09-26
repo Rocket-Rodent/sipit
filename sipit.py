@@ -1,11 +1,12 @@
 #!/usr/bin/python3
-from pysip import Client
+import pysip
 import argparse
 from configparser import ConfigParser
 import os
 import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 import sys
+import json
 
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
@@ -21,7 +22,7 @@ if __name__ == "__main__":
    config = ConfigParser()
    config.read(os.path.expanduser("~")+'/.sipit.ini')
 
-   sip_client = Client(config['sip']['end_point'],config['sip']['api_key'],verify=False)
+   sip_client = pysip.Client(config['sip']['end_point'],config['sip']['api_key'],verify=False)
    parser = argparse.ArgumentParser(description="Add Indicators and query SIP")
    subparsers = parser.add_subparsers(dest='command')
    commands = [ 'create', 'query','update' ]
@@ -40,6 +41,11 @@ if __name__ == "__main__":
    update_parser = subparsers.add_parser('update',help='update indicator attributes. update -h for more')
    update_parser.add_argument('-s','--status',dest='status',help='update status: query --status for list of status')
    update_parser.add_argument('-i','--id',dest='id',required=True,help='id of indicator to update - find id by searching indicator - query -v <indvalue>')
+
+   bulk_json = subparsers.add_parser('bulk_create',help="add indicators from a json file to SIP. IOC-Parser can be used to create the json file. create_bulk -h for more",
+           epilog="python3 sipit.py bulk_create -f /path/to/json/file")
+   bulk_json.add_argument('-f','--file',required=True,dest='bulk_json',
+      help='take the output of ioc-parser json format and upload the indicators into sip')
 
    create_parser = subparsers.add_parser('create',help="add indicator to SIP. create -h for more",
            epilog="python3 sipit.py create -t 'String - PE' -r 'http://mycoollink' --tags 'malz,phish,stuff' -v 'something.pdb'")
@@ -115,6 +121,18 @@ if __name__ == "__main__":
       for x in results:
          print(x['value'])
       sys.exit()
+
+   if args.command == 'bulk_create':
+       if args.bulk_json:
+           print("using {} to create indicators".format(args.bulk_json))
+           with open(args.bulk_json) as f:
+              data = json.load(f)
+              for indicator in data['indicators']:
+                 try:
+                    result = sip_client.post('/api/indicators', indicator)
+                    print(result)
+                 except pysip.pysip.ConflictError:
+                    pass
 
    if args.command == 'update':
       if args.status:
