@@ -14,6 +14,7 @@ import pprint
 import logging
 import yaml
 
+from pysip import ConflictError
 from sipwhitelist import SIPWhitelist
 
 try:
@@ -166,6 +167,7 @@ if __name__ == "__main__":
    query_parser.add_argument('--status',default=False,action='store_true',help='list possible status values for indicators')
    query_parser.add_argument('-id','--indicator-id',dest='id',help='query the specific indicator information for a sip id')
    query_parser.add_argument('-w', '--whitelist-info', dest='whitelist', action='store_true', help="List the configured SIP whitelist.")
+   query_parser.add_argument('--count', action='store_true', help='Get a basic count of indicators by status')
 
    update_parser = subparsers.add_parser('update',help='update indicator attributes. update -h for more')
    update_parser.add_argument('-s','--status',dest='status',choices=istatus_types, help='update status: query --status for list of status')
@@ -375,6 +377,11 @@ if __name__ == "__main__":
               for indicator in swl.whitelist[itype]:
                   print("---> {} | {}".format(itype, indicator))
           sys.exit()
+      if args.count:
+          for itype in istatus_types:
+              result = sip_client.get('/api/indicators?status={}&count'.format(itype))
+              print("{}: {}".format(itype, result['count']))
+          sys.exit()
 
       for x in results:
          print(x['value'])
@@ -389,8 +396,8 @@ if __name__ == "__main__":
                  try:
                     result = sip_client.post('/api/indicators', indicator)
                     print(result)
-                 except pysip.pysip.ConflictError:
-                    pass
+                 except ConflictError:
+                    print("Indicator already exists with this value.")
 
    if args.command == 'update':
       data = {}
@@ -453,7 +460,10 @@ if __name__ == "__main__":
          data['campaigns'] = [ args.campaign ]
    
       print(data)
-      print(sip_client.post('/api/indicators',data))
+      try:
+          result = sip_client.post('/api/indicators',data)
+      except ConflictError as e:
+          print(e)
 
    if args.command == 'delete':
-      print(sip_client.delete(args.id))
+      print(sip_client.delete('/api/indicators/{}'.format(args.id)))
